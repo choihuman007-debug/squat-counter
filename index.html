@@ -1,1 +1,866 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>SQUAT LAB</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00ff88;
+            --danger: #ff4757;
+            --cyan: #18dcff;
+            --dark: #0b0e11;
+            --card: rgba(255,255,255,0.04);
+            --card-border: rgba(255,255,255,0.07);
+            --text-dim: rgba(255,255,255,0.35);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        body { font-family:'Noto Sans KR',sans-serif; background:var(--dark); color:#fff; overflow:hidden; height:100vh; width:100vw; }
 
+        /* ── SCREENS ── */
+        .screen { position:absolute; inset:0; display:none; flex-direction:column; justify-content:center; align-items:center; z-index:50; background:var(--dark); }
+        .screen.active { display:flex; }
+
+        /* ── HOME ── */
+        #homeScreen { background: var(--dark); position:relative; overflow:hidden; }
+        #homeScreen::before {
+            content:''; position:absolute; top:-40%; left:-20%; width:140%; height:140%;
+            background: radial-gradient(ellipse at 30% 20%, rgba(0,255,136,0.06) 0%, transparent 60%),
+                        radial-gradient(ellipse at 70% 80%, rgba(24,220,255,0.04) 0%, transparent 60%);
+            animation: homeBg 8s ease-in-out infinite alternate;
+        }
+        @keyframes homeBg { to { transform: translate(5%,3%) scale(1.05); } }
+
+        .home-content { position:relative; z-index:2; text-align:center; padding:20px; width:100%; max-width:420px; }
+        .app-logo {
+            font-family:'Bebas Neue',sans-serif; font-size:64px; letter-spacing:8px;
+            background: linear-gradient(135deg, var(--primary), var(--cyan));
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+            line-height:1; margin-bottom:4px;
+        }
+        .app-sub { font-size:12px; color:var(--text-dim); letter-spacing:6px; margin-bottom:48px; }
+
+        .mode-btn {
+            display:flex; align-items:center; gap:16px; width:100%;
+            padding:20px 24px; margin-bottom:14px; border-radius:16px;
+            background:var(--card); border:1px solid var(--card-border);
+            color:#fff; cursor:pointer; transition:all 0.25s; text-align:left;
+            backdrop-filter:blur(8px); position:relative; overflow:hidden;
+        }
+        .mode-btn::after {
+            content:''; position:absolute; inset:0; opacity:0; transition:opacity 0.25s;
+            background: linear-gradient(135deg, rgba(0,255,136,0.08), rgba(24,220,255,0.05));
+        }
+        .mode-btn:hover::after, .mode-btn:active::after { opacity:1; }
+        .mode-btn:active { transform:scale(0.98); }
+        .mode-icon { font-size:32px; flex-shrink:0; position:relative; z-index:1; }
+        .mode-info { position:relative; z-index:1; }
+        .mode-title { font-weight:900; font-size:17px; margin-bottom:2px; }
+        .mode-desc { font-size:12px; color:var(--text-dim); }
+
+        /* ── CAMERA / CALIBRATION ── */
+        .setup-icon { font-size:56px; margin-bottom:24px; }
+        .setup-title { font-family:'Bebas Neue',sans-serif; font-size:36px; letter-spacing:3px; margin-bottom:8px; color:var(--primary); }
+        .setup-msg { font-size:14px; color:rgba(255,255,255,0.5); text-align:center; line-height:1.7; max-width:320px; }
+        .setup-progress { margin-top:28px; width:200px; height:4px; border-radius:2px; background:rgba(255,255,255,0.08); overflow:hidden; }
+        .setup-progress-fill { height:100%; width:0%; background:var(--primary); border-radius:2px; transition:width 0.3s; }
+
+        .countdown-ring {
+            width:120px; height:120px; margin-top:24px; position:relative;
+            display:flex; justify-content:center; align-items:center;
+        }
+        .countdown-ring svg { position:absolute; transform:rotate(-90deg); }
+        .countdown-num { font-family:'Bebas Neue',sans-serif; font-size:48px; color:var(--primary); }
+
+        /* ── GAME CANVAS + VIDEO CANVAS ── */
+        #video { display:none; }
+        #poseCanvas { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+
+        .play-area { position:absolute; inset:0; z-index:1; }
+
+        /* ── HUD (shared) ── */
+        .hud { position:absolute; inset:0; pointer-events:none; z-index:10; }
+        .hud-btn { pointer-events:all; }
+
+        .back-btn {
+            position:absolute; top:16px; left:16px; pointer-events:all;
+            background:rgba(0,0,0,0.5); backdrop-filter:blur(8px);
+            border:1px solid var(--card-border); border-radius:10px;
+            padding:8px 14px; color:rgba(255,255,255,0.6); font-size:13px;
+            cursor:pointer; transition:all 0.2s; font-family:'Noto Sans KR',sans-serif;
+        }
+        .back-btn:active { transform:scale(0.95); background:rgba(255,255,255,0.1); }
+
+        /* ── MODE 1: COUNTER HUD ── */
+        .counter-display {
+            position:absolute; top:16px; left:50%; transform:translateX(-50%);
+            text-align:center;
+        }
+        .counter-label { font-size:10px; letter-spacing:5px; color:var(--text-dim); }
+        .counter-num {
+            font-family:'Bebas Neue',sans-serif; font-size:88px; line-height:1;
+            color:var(--primary); text-shadow:0 0 40px rgba(0,255,136,0.3);
+            transition:transform 0.12s;
+        }
+        .counter-num.bump { transform:scale(1.18); }
+
+        .info-cards { position:absolute; top:16px; right:16px; display:flex; flex-direction:column; gap:8px; }
+        .info-card {
+            background:rgba(0,0,0,0.55); backdrop-filter:blur(10px);
+            border:1px solid var(--card-border); border-radius:10px;
+            padding:8px 14px; min-width:100px;
+        }
+        .info-label { font-size:9px; color:var(--text-dim); letter-spacing:2px; }
+        .info-val { font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--cyan); }
+
+        .phase-pill {
+            position:absolute; top:20px; left:70px;
+            padding:6px 14px; border-radius:20px; font-size:13px; font-weight:700;
+            backdrop-filter:blur(10px); border:1px solid var(--card-border);
+        }
+        .phase-pill.up { background:rgba(0,255,136,0.12); color:var(--primary); }
+        .phase-pill.down { background:rgba(255,71,87,0.12); color:var(--danger); }
+
+        .guide-text {
+            position:absolute; bottom:16px; left:50%; transform:translateX(-50%);
+            font-size:11px; color:var(--text-dim); letter-spacing:1px; white-space:nowrap;
+        }
+
+        .reset-btn {
+            position:absolute; bottom:16px; right:16px; pointer-events:all;
+            background:rgba(0,0,0,0.5); backdrop-filter:blur(8px);
+            border:1px solid var(--card-border); border-radius:10px;
+            padding:8px 16px; color:rgba(255,255,255,0.5); font-size:12px;
+            cursor:pointer; font-family:'Noto Sans KR',sans-serif; transition:all 0.2s;
+        }
+        .reset-btn:active { background:rgba(255,71,87,0.15); color:var(--danger); }
+
+        /* ── MODE 2: HOLD HUD ── */
+        .hold-timer {
+            position:absolute; top:16px; left:50%; transform:translateX(-50%);
+            text-align:center;
+        }
+        .hold-time {
+            font-family:'Bebas Neue',sans-serif; font-size:80px; line-height:1;
+            color:var(--cyan); text-shadow:0 0 30px rgba(24,220,255,0.3);
+        }
+        .hold-status {
+            font-size:13px; font-weight:700; margin-top:4px; letter-spacing:2px;
+        }
+        .hold-status.holding { color:var(--primary); }
+        .hold-status.idle { color:var(--text-dim); }
+        .hold-status.break { color:var(--danger); }
+
+        .hold-stats { position:absolute; top:16px; right:16px; display:flex; flex-direction:column; gap:8px; }
+
+        /* ── MODE 3: GAME HUD ── */
+        #gameCanvas {
+            position:absolute; bottom:0; left:0; width:100%; height:180px;
+            z-index:5; border-top:1px solid var(--card-border);
+            background:rgba(0,0,0,0.7);
+        }
+        .game-score {
+            position:absolute; top:16px; left:50%; transform:translateX(-50%);
+            text-align:center; z-index:10;
+        }
+        .game-score-num {
+            font-family:'Bebas Neue',sans-serif; font-size:72px; line-height:1;
+            color:#ffd700; text-shadow:0 0 30px rgba(255,215,0,0.3);
+        }
+        .game-over-overlay {
+            position:absolute; inset:0; z-index:20;
+            background:rgba(0,0,0,0.8); backdrop-filter:blur(8px);
+            display:none; flex-direction:column; justify-content:center; align-items:center;
+        }
+        .game-over-overlay.active { display:flex; }
+        .game-over-title { font-family:'Bebas Neue',sans-serif; font-size:48px; color:var(--danger); letter-spacing:4px; }
+        .game-over-score { font-family:'Bebas Neue',sans-serif; font-size:64px; color:#ffd700; margin:8px 0; }
+        .game-over-best { font-size:13px; color:var(--text-dim); margin-bottom:24px; }
+        .retry-btn {
+            padding:14px 36px; border-radius:12px; font-size:16px; font-weight:700;
+            background:linear-gradient(135deg, var(--primary), var(--cyan));
+            border:none; color:var(--dark); cursor:pointer; font-family:'Noto Sans KR',sans-serif;
+            transition:transform 0.15s;
+        }
+        .retry-btn:active { transform:scale(0.95); }
+
+        .game-instruction {
+            position:absolute; bottom:190px; left:50%; transform:translateX(-50%);
+            font-size:11px; color:var(--text-dim); letter-spacing:1px; z-index:10; white-space:nowrap;
+        }
+
+        /* ── ERROR ── */
+        .error-icon { font-size:48px; margin-bottom:16px; }
+        .error-title { font-family:'Bebas Neue',sans-serif; font-size:28px; color:var(--danger); margin-bottom:8px; }
+        .error-msg { font-size:13px; color:rgba(255,255,255,0.5); text-align:center; max-width:360px; line-height:1.7; }
+    </style>
+</head>
+<body>
+
+<!-- ════════════ SCREEN: HOME ════════════ -->
+<div class="screen active" id="homeScreen">
+    <div class="home-content">
+        <div class="app-logo">SQUAT LAB</div>
+        <div class="app-sub">AI 동작 분석</div>
+
+        <button class="mode-btn" onclick="startMode('counter')">
+            <span class="mode-icon">🏋️</span>
+            <div class="mode-info">
+                <div class="mode-title">스쿼트 하기</div>
+                <div class="mode-desc">스쿼트 횟수를 자동으로 카운트</div>
+            </div>
+        </button>
+
+        <button class="mode-btn" onclick="startMode('hold')">
+            <span class="mode-icon">🔥</span>
+            <div class="mode-info">
+                <div class="mode-title">스쿼트 버티기</div>
+                <div class="mode-desc">자세를 유지한 시간을 측정</div>
+            </div>
+        </button>
+
+        <button class="mode-btn" onclick="startMode('game')">
+            <span class="mode-icon">🎮</span>
+            <div class="mode-info">
+                <div class="mode-title">스쿼트 게임</div>
+                <div class="mode-desc">스쿼트로 허들을 뛰어넘어라!</div>
+            </div>
+        </button>
+    </div>
+</div>
+
+<!-- ════════════ SCREEN: CAMERA SETUP ════════════ -->
+<div class="screen" id="cameraScreen">
+    <div class="setup-icon">📷</div>
+    <div class="setup-title">CAMERA</div>
+    <div class="setup-msg">카메라를 연결하고 있습니다...</div>
+    <div class="setup-progress"><div class="setup-progress-fill" id="camProgress"></div></div>
+</div>
+
+<!-- ════════════ SCREEN: CALIBRATION ════════════ -->
+<div class="screen" id="calibScreen">
+    <canvas id="calibCanvas" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;"></canvas>
+    <div style="position:relative;z-index:2;text-align:center;">
+        <div class="setup-title" id="calibTitle">전신이 보이게 서주세요</div>
+        <div class="setup-msg" id="calibMsg">카메라에 전신이 잡히면 자동으로 진행됩니다</div>
+        <div class="countdown-ring" id="countdownRing" style="display:none; margin:20px auto 0;">
+            <svg width="120" height="120" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4"/>
+                <circle id="cdCircle" cx="60" cy="60" r="54" fill="none" stroke="var(--primary)" stroke-width="4"
+                    stroke-dasharray="339.29" stroke-dashoffset="0" stroke-linecap="round"/>
+            </svg>
+            <div class="countdown-num" id="cdNum">3</div>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════ SCREEN: PLAY (all modes share this) ════════════ -->
+<div class="screen" id="playScreen">
+    <canvas id="poseCanvas"></canvas>
+
+    <!-- MODE 1: Counter HUD -->
+    <div class="hud" id="counterHud" style="display:none;">
+        <button class="back-btn hud-btn" onclick="goHome()">← 홈</button>
+        <div class="phase-pill up" id="cPhasePill"><span id="cPhaseText">대기</span></div>
+        <div class="counter-display">
+            <div class="counter-label">S Q U A T S</div>
+            <div class="counter-num" id="cCount">0</div>
+        </div>
+        <div class="info-cards">
+            <div class="info-card"><div class="info-label">무릎 각도</div><div class="info-val" id="cAngle">--°</div></div>
+            <div class="info-card"><div class="info-label">골반 위치</div><div class="info-val" id="cHipPos" style="font-size:14px;">--</div></div>
+        </div>
+        <div class="guide-text">골반이 무릎 아래로 내려갔다 올라오면 1회</div>
+        <button class="reset-btn hud-btn" onclick="resetCounter()">↻ 리셋</button>
+    </div>
+
+    <!-- MODE 2: Hold HUD -->
+    <div class="hud" id="holdHud" style="display:none;">
+        <button class="back-btn hud-btn" onclick="goHome()">← 홈</button>
+        <div class="hold-timer">
+            <div class="counter-label">H O L D</div>
+            <div class="hold-time" id="hTime">0.0</div>
+            <div class="hold-status idle" id="hStatus">스쿼트 자세로 내려가세요</div>
+        </div>
+        <div class="hold-stats">
+            <div class="info-card"><div class="info-label">무릎 각도</div><div class="info-val" id="hAngle">--°</div></div>
+            <div class="info-card"><div class="info-label">최장 기록</div><div class="info-val" id="hBest">0.0s</div></div>
+            <div class="info-card"><div class="info-label">이탈 횟수</div><div class="info-val" id="hBreaks">0</div></div>
+        </div>
+        <div class="guide-text">골반을 무릎 아래로 유지하세요</div>
+        <button class="reset-btn hud-btn" onclick="resetHold()">↻ 리셋</button>
+    </div>
+
+    <!-- MODE 3: Game HUD -->
+    <div class="hud" id="gameHud" style="display:none;">
+        <button class="back-btn hud-btn" onclick="goHome()">← 홈</button>
+        <div class="game-score">
+            <div class="counter-label">S C O R E</div>
+            <div class="game-score-num" id="gScore">0</div>
+        </div>
+        <div class="game-instruction">스쿼트에서 일어나면 점프!</div>
+        <canvas id="gameCanvas"></canvas>
+        <div class="game-over-overlay" id="gameOverlay">
+            <div class="game-over-title">GAME OVER</div>
+            <div class="game-over-score" id="goScore">0</div>
+            <div class="game-over-best" id="goBest">최고 기록: 0</div>
+            <button class="retry-btn hud-btn" onclick="restartGame()">다시 하기</button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════ SCREEN: ERROR ════════════ -->
+<div class="screen" id="errorScreen">
+    <div class="error-icon">⚠️</div>
+    <div class="error-title">카메라 연결 실패</div>
+    <div class="error-msg" id="errorMsg">카메라 접근 권한이 필요합니다.</div>
+</div>
+
+<video id="video" playsinline></video>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js" crossorigin="anonymous"></script>
+
+<script>
+// ═══════════════════════════════════════════
+// SQUAT LAB — Full App Logic
+// ═══════════════════════════════════════════
+
+const $ = id => document.getElementById(id);
+const video = $('video');
+const poseCanvas = $('poseCanvas');
+const pCtx = poseCanvas.getContext('2d');
+
+let currentMode = null;      // 'counter' | 'hold' | 'game'
+let pose = null;
+let stream = null;
+let animFrameId = null;
+let isRunning = false;
+
+// ── Calibration data ──
+let calibData = { hipKneeDiff: 0, ready: false };
+const CALIB_FRAMES = 90;     // 3 sec at ~30fps
+let calibSamples = [];
+let calibPhase = 'detect';   // 'detect' | 'countdown' | 'done'
+let bodyDetectedFrames = 0;
+
+// ── Counter state ──
+let cCount = 0, cWasDown = false;
+
+// ── Hold state ──
+let hTime = 0, hBest = 0, hBreaks = 0, hWasHolding = false, hLastFrame = 0;
+
+// ── Game state ──
+let gCanvas, gCtx;
+let gScore = 0, gBest = 0, gSpeed = 3, gAlive = true;
+let gChar = { y: 0, vy: 0, jumping: false, grounded: true };
+let gHurdles = [];
+let gFrame = 0;
+let gWasDown = false;
+
+// ═══════ UTILITIES ═══════
+
+function angleBetween(a, b, c) {
+    const ba = { x: a.x - b.x, y: a.y - b.y };
+    const bc = { x: c.x - b.x, y: c.y - b.y };
+    const dot = ba.x * bc.x + ba.y * bc.y;
+    const magBA = Math.sqrt(ba.x*ba.x + ba.y*ba.y);
+    const magBC = Math.sqrt(bc.x*bc.x + bc.y*bc.y);
+    if (magBA === 0 || magBC === 0) return 180;
+    return Math.acos(Math.min(1, Math.max(-1, dot / (magBA * magBC)))) * (180 / Math.PI);
+}
+
+function isSquatDown(lm) {
+    const hipY  = (lm[23].y + lm[24].y) / 2;
+    const kneeY = (lm[25].y + lm[26].y) / 2;
+    const diff = hipY - kneeY;
+    const threshold = calibData.hipKneeDiff + 0.02;
+    const leftAngle  = angleBetween(lm[23], lm[25], lm[27]);
+    const rightAngle = angleBetween(lm[24], lm[26], lm[28]);
+    const avgAngle = (leftAngle + rightAngle) / 2;
+    return diff > threshold && avgAngle < 130;
+}
+
+function getKneeAngle(lm) {
+    const l = angleBetween(lm[23], lm[25], lm[27]);
+    const r = angleBetween(lm[24], lm[26], lm[28]);
+    return Math.round((l + r) / 2);
+}
+
+function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    $(id).classList.add('active');
+}
+
+// ═══════ DRAWING — Mirror-fixed ═══════
+
+function drawPose(ctx, lm, W, H, isDown) {
+    // Skeleton bones
+    const bones = [[11,12],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28],[11,13],[13,15],[12,14],[14,16]];
+    bones.forEach(([i,j]) => {
+        const a = lm[i], b = lm[j];
+        ctx.beginPath();
+        ctx.moveTo(W - a.x*W, a.y*H);
+        ctx.lineTo(W - b.x*W, b.y*H);
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    });
+    // Highlight legs
+    [[23,25],[25,27],[24,26],[26,28]].forEach(([i,j]) => {
+        const a = lm[i], b = lm[j];
+        ctx.beginPath();
+        ctx.moveTo(W - a.x*W, a.y*H);
+        ctx.lineTo(W - b.x*W, b.y*H);
+        ctx.strokeStyle = 'rgba(24,220,255,0.4)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+    });
+    // Knee reference line
+    const kneeY = ((lm[25].y + lm[26].y) / 2) * H;
+    ctx.setLineDash([8,6]);
+    ctx.strokeStyle = 'rgba(24,220,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W*0.1, kneeY); ctx.lineTo(W*0.9, kneeY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Markers — text is NOT mirrored
+    const hipColor = isDown ? 'var(--danger)' : 'var(--primary)';
+    const hipColorHex = isDown ? '#ff4757' : '#00ff88';
+    const markerPairs = [
+        { p: lm[23], label: '골반', color: hipColorHex },
+        { p: lm[24], label: '골반', color: hipColorHex },
+        { p: lm[25], label: '무릎', color: '#18dcff' },
+        { p: lm[26], label: '무릎', color: '#18dcff' },
+    ];
+    markerPairs.forEach(({ p, label, color }) => {
+        const x = W - p.x * W;
+        const y = p.y * H;
+        // Glow
+        ctx.beginPath(); ctx.arc(x,y,20,0,Math.PI*2);
+        ctx.fillStyle = color + '20'; ctx.fill();
+        // Ring
+        ctx.beginPath(); ctx.arc(x,y,12,0,Math.PI*2);
+        ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
+        // Dot
+        ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2);
+        ctx.fillStyle = color; ctx.fill();
+        // Label (normal direction — no mirror)
+        ctx.save();
+        ctx.font = 'bold 12px "Noto Sans KR", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fff';
+        ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 6;
+        ctx.fillText(label, x, y - 20);
+        ctx.restore();
+    });
+    // Ankles
+    [lm[27], lm[28]].forEach(p => {
+        ctx.beginPath(); ctx.arc(W - p.x*W, p.y*H, 4, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fill();
+    });
+}
+
+function drawCamera(ctx, image, W, H) {
+    ctx.save();
+    ctx.translate(W, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(image, 0, 0, W, H);
+    ctx.restore();
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(0, 0, W, H);
+}
+
+// ═══════ MODE START ═══════
+
+async function startMode(mode) {
+    currentMode = mode;
+    showScreen('cameraScreen');
+
+    try {
+        // Init MediaPipe
+        if (!pose) {
+            pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${f}` });
+            pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
+        }
+
+        $('camProgress').style.width = '40%';
+
+        // Camera
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width:1280, height:720, facingMode:'user' } });
+        video.srcObject = stream;
+        await video.play();
+
+        $('camProgress').style.width = '100%';
+        await new Promise(r => setTimeout(r, 400));
+
+        // Go to calibration
+        startCalibration();
+
+    } catch(err) {
+        showScreen('errorScreen');
+        if (err.name === 'NotAllowedError') $('errorMsg').innerHTML = '카메라 접근 권한이 거부되었습니다.<br>브라우저 설정에서 카메라 권한을 허용한 뒤 새로고침하세요.';
+        else if (err.name === 'NotFoundError') $('errorMsg').innerHTML = '카메라를 찾을 수 없습니다.<br>웹캠이 연결되어 있는지 확인해주세요.';
+        else $('errorMsg').innerHTML = '오류: ' + err.message;
+    }
+}
+
+// ═══════ CALIBRATION ═══════
+
+function startCalibration() {
+    showScreen('calibScreen');
+    calibPhase = 'detect';
+    calibSamples = [];
+    bodyDetectedFrames = 0;
+    $('calibTitle').textContent = '전신이 보이게 서주세요';
+    $('calibMsg').textContent = '카메라에 전신이 잡히면 자동으로 진행됩니다';
+    $('countdownRing').style.display = 'none';
+
+    const calibCanvas = $('calibCanvas');
+    const cCtx = calibCanvas.getContext('2d');
+
+    pose.onResults(results => {
+        calibCanvas.width = video.videoWidth;
+        calibCanvas.height = video.videoHeight;
+        const W = calibCanvas.width, H = calibCanvas.height;
+
+        drawCamera(cCtx, results.image, W, H);
+
+        if (!results.poseLandmarks) {
+            bodyDetectedFrames = 0;
+            return;
+        }
+
+        const lm = results.poseLandmarks;
+        // Check if full body visible (ankles visible)
+        const ankleVis = Math.min(lm[27].visibility, lm[28].visibility);
+
+        if (calibPhase === 'detect') {
+            if (ankleVis > 0.5) {
+                bodyDetectedFrames++;
+                // Draw skeleton preview
+                drawPose(cCtx, lm, W, H, false);
+
+                if (bodyDetectedFrames > 15) {
+                    calibPhase = 'countdown';
+                    $('calibTitle').textContent = '가만히 서 있으세요';
+                    $('calibMsg').textContent = '영점을 설정하고 있습니다';
+                    $('countdownRing').style.display = 'flex';
+                }
+            } else {
+                bodyDetectedFrames = 0;
+            }
+        } else if (calibPhase === 'countdown') {
+            drawPose(cCtx, lm, W, H, false);
+
+            const hipY = (lm[23].y + lm[24].y) / 2;
+            const kneeY = (lm[25].y + lm[26].y) / 2;
+            calibSamples.push(hipY - kneeY);
+
+            const progress = calibSamples.length / CALIB_FRAMES;
+            const remaining = Math.ceil((CALIB_FRAMES - calibSamples.length) / 30);
+            $('cdNum').textContent = remaining;
+            $('cdCircle').style.strokeDashoffset = (1 - progress) * 339.29;
+
+            if (calibSamples.length >= CALIB_FRAMES) {
+                calibData.hipKneeDiff = calibSamples.reduce((a,b) => a+b, 0) / calibSamples.length;
+                calibData.ready = true;
+                calibPhase = 'done';
+                launchMode();
+            }
+        }
+    });
+
+    // Frame loop for calibration
+    function calibLoop() {
+        if (calibPhase === 'done') return;
+        if (video.readyState >= 2) pose.send({ image: video });
+        requestAnimationFrame(calibLoop);
+    }
+    calibLoop();
+}
+
+// ═══════ LAUNCH MODE ═══════
+
+function launchMode() {
+    showScreen('playScreen');
+
+    // Hide all HUDs
+    $('counterHud').style.display = 'none';
+    $('holdHud').style.display = 'none';
+    $('gameHud').style.display = 'none';
+
+    if (currentMode === 'counter') {
+        $('counterHud').style.display = 'block';
+        resetCounter();
+    } else if (currentMode === 'hold') {
+        $('holdHud').style.display = 'block';
+        resetHold();
+    } else if (currentMode === 'game') {
+        $('gameHud').style.display = 'block';
+        initGame();
+    }
+
+    isRunning = true;
+    pose.onResults(onPoseResults);
+
+    function frameLoop() {
+        if (!isRunning) return;
+        if (video.readyState >= 2) pose.send({ image: video });
+        animFrameId = requestAnimationFrame(frameLoop);
+    }
+    frameLoop();
+}
+
+// ═══════ POSE RESULTS HANDLER ═══════
+
+function onPoseResults(results) {
+    poseCanvas.width = video.videoWidth;
+    poseCanvas.height = video.videoHeight;
+    const W = poseCanvas.width, H = poseCanvas.height;
+
+    drawCamera(pCtx, results.image, W, H);
+
+    if (!results.poseLandmarks) return;
+    const lm = results.poseLandmarks;
+    const down = isSquatDown(lm);
+    const angle = getKneeAngle(lm);
+
+    drawPose(pCtx, lm, W, H, down);
+
+    if (currentMode === 'counter') updateCounter(down, angle);
+    else if (currentMode === 'hold') updateHold(down, angle);
+    else if (currentMode === 'game') updateGame(down, angle);
+}
+
+// ═══════ MODE 1: COUNTER ═══════
+
+function updateCounter(down, angle) {
+    $('cAngle').textContent = angle + '°';
+    $('cAngle').style.color = angle < 90 ? '#ff4757' : '#18dcff';
+    $('cHipPos').textContent = down ? '무릎 아래' : '무릎 위';
+    $('cHipPos').style.color = down ? '#ff4757' : '#00ff88';
+
+    if (down) {
+        $('cPhasePill').className = 'phase-pill down';
+        $('cPhaseText').textContent = '하강 ▼';
+    } else {
+        $('cPhasePill').className = 'phase-pill up';
+        $('cPhaseText').textContent = '상승 ▲';
+    }
+
+    if (cWasDown && !down) {
+        cCount++;
+        $('cCount').textContent = cCount;
+        $('cCount').classList.add('bump');
+        setTimeout(() => $('cCount').classList.remove('bump'), 120);
+    }
+    cWasDown = down;
+}
+
+function resetCounter() {
+    cCount = 0; cWasDown = false;
+    $('cCount').textContent = '0';
+}
+
+// ═══════ MODE 2: HOLD ═══════
+
+function updateHold(down, angle) {
+    $('hAngle').textContent = angle + '°';
+    $('hAngle').style.color = angle < 90 ? '#ff4757' : '#18dcff';
+
+    const now = performance.now();
+    if (hLastFrame === 0) hLastFrame = now;
+    const dt = (now - hLastFrame) / 1000;
+    hLastFrame = now;
+
+    if (down) {
+        hTime += dt;
+        $('hTime').textContent = hTime.toFixed(1);
+        $('hTime').style.color = '#18dcff';
+        $('hStatus').textContent = '유지 중...';
+        $('hStatus').className = 'hold-status holding';
+
+        if (hTime > hBest) {
+            hBest = hTime;
+            $('hBest').textContent = hBest.toFixed(1) + 's';
+        }
+        if (!hWasHolding) { /* just entered hold */ }
+    } else {
+        if (hWasHolding && hTime > 0.5) {
+            hBreaks++;
+            $('hBreaks').textContent = hBreaks;
+        }
+        hTime = 0;
+        $('hTime').textContent = '0.0';
+        $('hTime').style.color = 'rgba(255,255,255,0.3)';
+        $('hStatus').textContent = '스쿼트 자세로 내려가세요';
+        $('hStatus').className = 'hold-status idle';
+    }
+    hWasHolding = down;
+}
+
+function resetHold() {
+    hTime = 0; hBest = 0; hBreaks = 0; hWasHolding = false; hLastFrame = 0;
+    $('hTime').textContent = '0.0';
+    $('hBest').textContent = '0.0s';
+    $('hBreaks').textContent = '0';
+}
+
+// ═══════ MODE 3: GAME ═══════
+
+function initGame() {
+    gCanvas = $('gameCanvas');
+    gCtx = gCanvas.getContext('2d');
+    gScore = 0; gSpeed = 3.5; gAlive = true; gFrame = 0;
+    gChar = { y: 0, vy: 0, jumping: false, grounded: true };
+    gHurdles = [];
+    gWasDown = false;
+    $('gScore').textContent = '0';
+    $('gameOverlay').classList.remove('active');
+    requestAnimationFrame(gameLoop);
+}
+
+function restartGame() {
+    initGame();
+}
+
+function updateGame(down) {
+    // Jump trigger: was squatting, now standing
+    if (gWasDown && !down && gAlive && gChar.grounded) {
+        gChar.vy = -12;
+        gChar.jumping = true;
+        gChar.grounded = false;
+    }
+    gWasDown = down;
+}
+
+function gameLoop() {
+    if (!isRunning || currentMode !== 'game') return;
+    if (!gAlive) return;
+
+    const W = gCanvas.width = gCanvas.offsetWidth * 2;
+    const H = gCanvas.height = gCanvas.offsetHeight * 2;
+    gCtx.clearRect(0, 0, W, H);
+
+    const GROUND = H - 30;
+    const CHAR_W = 36, CHAR_H = 52;
+    const charX = W * 0.2;
+
+    // ── Character physics ──
+    gChar.vy += 0.7; // gravity
+    gChar.y += gChar.vy;
+    if (gChar.y >= 0) { gChar.y = 0; gChar.vy = 0; gChar.grounded = true; gChar.jumping = false; }
+    const charDrawY = GROUND - CHAR_H + gChar.y;
+
+    // ── Hurdles ──
+    gFrame++;
+    const spawnInterval = Math.max(50, 110 - gScore * 2);
+    if (gFrame % spawnInterval === 0) {
+        const hurdleH = 30 + Math.random() * 25;
+        gHurdles.push({ x: W + 20, w: 18, h: hurdleH });
+    }
+
+    gHurdles.forEach(h => { h.x -= gSpeed; });
+    gHurdles = gHurdles.filter(h => h.x > -40);
+
+    // ── Speed increase ──
+    gSpeed = 3.5 + gScore * 0.15;
+
+    // ── Draw ground ──
+    gCtx.strokeStyle = 'rgba(255,255,255,0.15)';
+    gCtx.lineWidth = 2;
+    gCtx.beginPath(); gCtx.moveTo(0, GROUND); gCtx.lineTo(W, GROUND); gCtx.stroke();
+    // Ground dashes
+    for (let i = (gFrame * gSpeed * -1) % 40; i < W; i += 40) {
+        gCtx.strokeStyle = 'rgba(255,255,255,0.06)';
+        gCtx.beginPath(); gCtx.moveTo(i, GROUND + 10); gCtx.lineTo(i + 20, GROUND + 10); gCtx.stroke();
+    }
+
+    // ── Draw character ──
+    const isJumping = gChar.y < -2;
+    // Body
+    gCtx.fillStyle = isJumping ? '#00ff88' : '#18dcff';
+    gCtx.shadowColor = isJumping ? 'rgba(0,255,136,0.4)' : 'rgba(24,220,255,0.3)';
+    gCtx.shadowBlur = 12;
+    // Simple stick figure
+    const cx = charX, cy = charDrawY;
+    // Head
+    gCtx.beginPath(); gCtx.arc(cx, cy + 8, 8, 0, Math.PI*2); gCtx.fill();
+    // Body
+    gCtx.strokeStyle = gCtx.fillStyle;
+    gCtx.lineWidth = 3; gCtx.lineCap = 'round';
+    gCtx.beginPath(); gCtx.moveTo(cx, cy+16); gCtx.lineTo(cx, cy+36); gCtx.stroke();
+    // Arms
+    if (isJumping) {
+        gCtx.beginPath(); gCtx.moveTo(cx, cy+22); gCtx.lineTo(cx-12, cy+14); gCtx.stroke();
+        gCtx.beginPath(); gCtx.moveTo(cx, cy+22); gCtx.lineTo(cx+12, cy+14); gCtx.stroke();
+    } else {
+        gCtx.beginPath(); gCtx.moveTo(cx, cy+22); gCtx.lineTo(cx-10, cy+30); gCtx.stroke();
+        gCtx.beginPath(); gCtx.moveTo(cx, cy+22); gCtx.lineTo(cx+10, cy+30); gCtx.stroke();
+    }
+    // Legs
+    if (isJumping) {
+        gCtx.beginPath(); gCtx.moveTo(cx, cy+36); gCtx.lineTo(cx-8, cy+48); gCtx.stroke();
+        gCtx.beginPath(); gCtx.moveTo(cx, cy+36); gCtx.lineTo(cx+8, cy+48); gCtx.stroke();
+    } else {
+        gCtx.beginPath(); gCtx.moveTo(cx, cy+36); gCtx.lineTo(cx-10, cy+52); gCtx.stroke();
+        gCtx.beginPath(); gCtx.moveTo(cx, cy+36); gCtx.lineTo(cx+10, cy+52); gCtx.stroke();
+    }
+    gCtx.shadowBlur = 0;
+
+    // ── Draw hurdles ──
+    gHurdles.forEach(h => {
+        gCtx.fillStyle = '#ff4757';
+        gCtx.shadowColor = 'rgba(255,71,87,0.3)'; gCtx.shadowBlur = 8;
+        gCtx.fillRect(h.x, GROUND - h.h, h.w, h.h);
+        // Top stripe
+        gCtx.fillStyle = '#ff6b7a';
+        gCtx.fillRect(h.x, GROUND - h.h, h.w, 4);
+        gCtx.shadowBlur = 0;
+    });
+
+    // ── Collision ──
+    const charBox = { x: charX - 10, y: charDrawY + 8, w: 20, h: 44 };
+    for (const h of gHurdles) {
+        const hBox = { x: h.x, y: GROUND - h.h, w: h.w, h: h.h };
+        if (charBox.x < hBox.x + hBox.w && charBox.x + charBox.w > hBox.x &&
+            charBox.y + charBox.h > hBox.y) {
+            gAlive = false;
+            $('goScore').textContent = gScore;
+            if (gScore > gBest) gBest = gScore;
+            $('goBest').textContent = '최고 기록: ' + gBest;
+            $('gameOverlay').classList.add('active');
+            return;
+        }
+    }
+
+    // ── Score: passed hurdles ──
+    gHurdles.forEach(h => {
+        if (!h.scored && h.x + h.w < charX) {
+            h.scored = true;
+            gScore++;
+            $('gScore').textContent = gScore;
+        }
+    });
+
+    requestAnimationFrame(gameLoop);
+}
+
+// ═══════ GO HOME ═══════
+
+function goHome() {
+    isRunning = false;
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    calibData.ready = false;
+    calibPhase = 'detect';
+    showScreen('homeScreen');
+}
+
+</script>
+</body>
+</html>
