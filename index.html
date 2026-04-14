@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 스쿼트 카운터</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background: #0a0a0f;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .app {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #0a0a0f;
+        }
+
+        /* Video & Canvas */
+        #video {
+            display: none;
+        }
+
+        #canvas {
+            max-width: 100vw;
+            max-height: 100vh;
+            transform: scaleX(-1);
+            border-radius: 0;
+        }
+
+        /* Loading Screen */
+        .loading-screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #0a0a0f;
+            z-index: 100;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-icon {
+            width: 80px;
+            height: 80px;
+            border: 3px solid rgba(0, 255, 136, 0.1);
+            border-top: 3px solid #00ff88;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 32px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 28px;
+            font-weight: 900;
+            color: #00ff88;
+            margin-bottom: 12px;
+            letter-spacing: 3px;
+        }
+
+        .loading-sub {
+            font-size: 14px;
+            color: rgba(255,255,255,0.4);
+            letter-spacing: 2px;
+        }
+
+        .loading-steps {
+            margin-top: 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .loading-step {
+            font-size: 13px;
+            color: rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.3s;
+        }
+
+        .loading-step.active {
+            color: #00ff88;
+        }
+
+        .loading-step.done {
+            color: rgba(255,255,255,0.5);
+        }
+
+        .step-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            transition: background 0.3s;
+        }
+
+        .loading-step.active .step-dot {
+            background: #00ff88;
+            box-shadow: 0 0 8px #00ff88;
+        }
+
+        .loading-step.done .step-dot {
+            background: rgba(255,255,255,0.4);
+        }
+
+        /* HUD Overlay */
+        .hud {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Count Display - Top Center */
+        .count-block {
+            position: absolute;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+        }
+
+        .count-label {
+            font-family: 'Orbitron', monospace;
+            font-size: 11px;
+            letter-spacing: 6px;
+            color: rgba(255,255,255,0.4);
+            margin-bottom: 4px;
+        }
+
+        .count-number {
+            font-family: 'Orbitron', monospace;
+            font-size: 96px;
+            font-weight: 900;
+            line-height: 1;
+            color: #00ff88;
+            text-shadow: 0 0 40px rgba(0,255,136,0.4), 0 0 80px rgba(0,255,136,0.1);
+            transition: transform 0.15s ease;
+        }
+
+        .count-number.bump {
+            transform: scale(1.15);
+        }
+
+        /* Phase Indicator - Top Left */
+        .phase-block {
+            position: absolute;
+            top: 28px;
+            left: 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .phase-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .phase-badge.up {
+            background: rgba(0, 255, 136, 0.12);
+            color: #00ff88;
+        }
+
+        .phase-badge.down {
+            background: rgba(255, 107, 107, 0.12);
+            color: #ff6b6b;
+        }
+
+        .phase-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .phase-badge.up .phase-dot { background: #00ff88; }
+        .phase-badge.down .phase-dot { background: #ff6b6b; }
+
+        /* Stats Panel - Top Right */
+        .stats-block {
+            position: absolute;
+            top: 28px;
+            right: 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stat-card {
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            padding: 10px 18px;
+            min-width: 120px;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: rgba(255,255,255,0.35);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+
+        .stat-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 22px;
+            font-weight: 700;
+            color: #4ecdc4;
+        }
+
+        /* Reset Button - Bottom Right */
+        .reset-btn {
+            position: absolute;
+            bottom: 28px;
+            right: 28px;
+            pointer-events: all;
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 10px 20px;
+            color: rgba(255,255,255,0.5);
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            letter-spacing: 1px;
+        }
+
+        .reset-btn:hover {
+            background: rgba(255, 107, 107, 0.15);
+            border-color: rgba(255, 107, 107, 0.3);
+            color: #ff6b6b;
+        }
+
+        /* Guide Text - Bottom Center */
+        .guide {
+            position: absolute;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: rgba(255,255,255,0.25);
+            letter-spacing: 1px;
+            white-space: nowrap;
+        }
+
+        /* Depth Gauge - Left side */
+        .depth-gauge {
+            position: absolute;
+            left: 28px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 6px;
+            height: 200px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .depth-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(to top, #00ff88, #4ecdc4);
+            border-radius: 3px;
+            transition: height 0.1s ease;
+        }
+
+        /* Error Screen */
+        .error-screen {
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #0a0a0f;
+            z-index: 100;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .error-screen.visible {
+            display: flex;
+        }
+
+        .error-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .error-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 20px;
+            color: #ff6b6b;
+            margin-bottom: 12px;
+        }
+
+        .error-msg {
+            font-size: 14px;
+            color: rgba(255,255,255,0.5);
+            max-width: 400px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <video id="video" playsinline></video>
+        <canvas id="canvas"></canvas>
+
+        <!-- Loading Screen -->
+        <div class="loading-screen" id="loadingScreen">
+            <div class="loading-icon"></div>
+            <div class="loading-title">SQUAT COUNTER</div>
+            <div class="loading-sub">AI 동작 분석 시스템</div>
+            <div class="loading-steps">
+                <div class="loading-step" id="step1"><span class="step-dot"></span>MediaPipe 모델 로딩</div>
+                <div class="loading-step" id="step2"><span class="step-dot"></span>카메라 연결</div>
+                <div class="loading-step" id="step3"><span class="step-dot"></span>포즈 감지 초기화</div>
+            </div>
+        </div>
+
+        <!-- Error Screen -->
+        <div class="error-screen" id="errorScreen">
+            <div class="error-icon">⚠️</div>
+            <div class="error-title">카메라 연결 실패</div>
+            <div class="error-msg" id="errorMsg">
+                카메라 접근 권한이 필요합니다.<br>
+                브라우저 설정에서 카메라 권한을 허용해주세요.
+            </div>
+        </div>
+
+        <!-- HUD Overlay -->
+        <div class="hud" id="hud" style="display:none;">
+            <!-- Count -->
+            <div class="count-block">
+                <div class="count-label">S Q U A T S</div>
+                <div class="count-number" id="countNum">0</div>
+            </div>
+
+            <!-- Phase -->
+            <div class="phase-block">
+                <div class="phase-badge up" id="phaseBadge">
+                    <span class="phase-dot"></span>
+                    <span id="phaseText">대기</span>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-block">
+                <div class="stat-card">
+                    <div class="stat-label">무릎 각도</div>
+                    <div class="stat-value" id="kneeAngleVal">--°</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">골반 위치</div>
+                    <div class="stat-value" id="hipPosVal" style="font-size:14px;">--</div>
+                </div>
+            </div>
+
+            <!-- Depth Gauge -->
+            <div class="depth-gauge">
+                <div class="depth-fill" id="depthFill" style="height:0%"></div>
+            </div>
+
+            <!-- Guide -->
+            <div class="guide">골반이 무릎 아래로 내려가면 1회 카운트</div>
+
+            <!-- Reset -->
+            <button class="reset-btn" id="resetBtn">↻ 리셋</button>
+        </div>
+    </div>
+
+    <!-- MediaPipe Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js" crossorigin="anonymous"></script>
+
+    <script>
+    (function() {
+        // ─── DOM References ───
+        const video       = document.getElementById('video');
+        const canvas      = document.getElementById('canvas');
+        const ctx         = canvas.getContext('2d');
+        const loadScreen  = document.getElementById('loadingScreen');
+        const errorScreen = document.getElementById('errorScreen');
+        const errorMsg    = document.getElementById('errorMsg');
+        const hud         = document.getElementById('hud');
+        const countNum    = document.getElementById('countNum');
+        const phaseBadge  = document.getElementById('phaseBadge');
+        const phaseText   = document.getElementById('phaseText');
+        const kneeAngleVal= document.getElementById('kneeAngleVal');
+        const hipPosVal   = document.getElementById('hipPosVal');
+        const depthFill   = document.getElementById('depthFill');
+        const resetBtn    = document.getElementById('resetBtn');
+        const step1       = document.getElementById('step1');
+        const step2       = document.getElementById('step2');
+        const step3       = document.getElementById('step3');
+
+        // ─── State ───
+        let squatCount = 0;
+        let wasDown = false;           // 이전 프레임에서 골반이 무릎 아래였는지
+        let minKneeAngle = 180;        // 현재 세트에서 최소 무릎각도
+
+        // ─── Utility: 세 점 사이 각도 계산 ───
+        function angleBetween(a, b, c) {
+            const ba = { x: a.x - b.x, y: a.y - b.y };
+            const bc = { x: c.x - b.x, y: c.y - b.y };
+            const dot = ba.x * bc.x + ba.y * bc.y;
+            const magBA = Math.sqrt(ba.x * ba.x + ba.y * ba.y);
+            const magBC = Math.sqrt(bc.x * bc.x + bc.y * bc.y);
+            if (magBA === 0 || magBC === 0) return 180;
+            let angle = Math.acos(Math.min(1, Math.max(-1, dot / (magBA * magBC))));
+            return angle * (180 / Math.PI);
+        }
+
+        // ─── Drawing Helpers ───
+        function drawMarker(x, y, label, color, radius) {
+            // Outer glow
+            ctx.beginPath();
+            ctx.arc(x, y, radius + 8, 0, Math.PI * 2);
+            ctx.fillStyle = color + '25';
+            ctx.fill();
+
+            // Ring
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Center dot
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            // Label
+            ctx.font = 'bold 13px "Noto Sans KR", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#fff';
+            ctx.shadowColor = 'rgba(0,0,0,0.8)';
+            ctx.shadowBlur = 4;
+            ctx.fillText(label, x, y - radius - 10);
+            ctx.shadowBlur = 0;
+        }
+
+        function drawBone(landmarks, i, j, color, width) {
+            const a = landmarks[i];
+            const b = landmarks[j];
+            if (!a || !b) return;
+            ctx.beginPath();
+            ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
+            ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        }
+
+        // ─── Pose Results Handler ───
+        function onResults(results) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw camera feed
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+            // Dim overlay for contrast
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (results.poseLandmarks) {
+                const lm = results.poseLandmarks;
+                const W = canvas.width;
+                const H = canvas.height;
+
+                // ── Skeleton ──
+                const bones = [
+                    [11,12], [11,23], [12,24], [23,24],   // torso
+                    [23,25], [25,27],                       // left leg
+                    [24,26], [26,28],                       // right leg
+                    [11,13], [13,15],                       // left arm
+                    [12,14], [14,16],                       // right arm
+                ];
+                bones.forEach(([i,j]) => drawBone(lm, i, j, 'rgba(255,255,255,0.2)', 2));
+
+                // ── Highlight leg bones ──
+                drawBone(lm, 23, 25, 'rgba(78,205,196,0.5)', 3);  // left hip-knee
+                drawBone(lm, 25, 27, 'rgba(78,205,196,0.5)', 3);  // left knee-ankle
+                drawBone(lm, 24, 26, 'rgba(78,205,196,0.5)', 3);  // right hip-knee
+                drawBone(lm, 26, 28, 'rgba(78,205,196,0.5)', 3);  // right knee-ankle
+
+                // ── Key landmarks ──
+                const leftHip    = lm[23];
+                const rightHip   = lm[24];
+                const leftKnee   = lm[25];
+                const rightKnee  = lm[26];
+                const leftAnkle  = lm[27];
+                const rightAnkle = lm[28];
+
+                // Average Y positions (screen Y: 0=top, 1=bottom)
+                const hipY  = (leftHip.y + rightHip.y) / 2;
+                const kneeY = (leftKnee.y + rightKnee.y) / 2;
+
+                // ── Knee reference line ──
+                const lineY = kneeY * H;
+                ctx.setLineDash([8, 6]);
+                ctx.strokeStyle = 'rgba(78, 205, 196, 0.3)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(W * 0.15, lineY);
+                ctx.lineTo(W * 0.85, lineY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Reference line label
+                ctx.font = '11px "Orbitron", monospace';
+                ctx.fillStyle = 'rgba(78, 205, 196, 0.5)';
+                ctx.textAlign = 'left';
+                ctx.fillText('KNEE LINE', W * 0.15, lineY - 6);
+
+                // ── Squat detection ──
+                const isDown = hipY > kneeY;
+
+                // ── Calculate knee angle ──
+                const leftAngle  = angleBetween(leftHip, leftKnee, leftAnkle);
+                const rightAngle = angleBetween(rightHip, rightKnee, rightAnkle);
+                const avgAngle   = Math.round((leftAngle + rightAngle) / 2);
+
+                if (isDown) minKneeAngle = Math.min(minKneeAngle, avgAngle);
+
+                // ── Count logic: 골반이 무릎 아래로 갔다가 다시 올라오면 +1 ──
+                if (wasDown && !isDown) {
+                    squatCount++;
+                    countNum.textContent = squatCount;
+                    countNum.classList.add('bump');
+                    setTimeout(() => countNum.classList.remove('bump'), 150);
+                    minKneeAngle = 180;
+                }
+                wasDown = isDown;
+
+                // ── Draw markers ──
+                const hipColor  = isDown ? '#ff6b6b' : '#00ff88';
+                const kneeColor = '#4ecdc4';
+
+                drawMarker(leftHip.x  * W, leftHip.y  * H, '골반', hipColor, 14);
+                drawMarker(rightHip.x * W, rightHip.y * H, '골반', hipColor, 14);
+                drawMarker(leftKnee.x  * W, leftKnee.y  * H, '무릎', kneeColor, 14);
+                drawMarker(rightKnee.x * W, rightKnee.y * H, '무릎', kneeColor, 14);
+
+                // Small markers for ankles
+                [leftAnkle, rightAnkle].forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x * W, p.y * H, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                    ctx.fill();
+                });
+
+                // ── Update HUD ──
+                kneeAngleVal.textContent = avgAngle + '°';
+                kneeAngleVal.style.color = avgAngle < 90 ? '#ff6b6b' : '#4ecdc4';
+
+                if (isDown) {
+                    phaseBadge.className = 'phase-badge down';
+                    phaseText.textContent = '하강 ▼';
+                    hipPosVal.textContent = '무릎 아래';
+                    hipPosVal.style.color = '#ff6b6b';
+                } else {
+                    phaseBadge.className = 'phase-badge up';
+                    phaseText.textContent = '상승 ▲';
+                    hipPosVal.textContent = '무릎 위';
+                    hipPosVal.style.color = '#00ff88';
+                }
+
+                // Depth gauge (0% = standing, 100% = deep squat)
+                const depthRatio = Math.max(0, Math.min(1, (kneeY - hipY + 0.15) / 0.3));
+                depthFill.style.height = (depthRatio * 100) + '%';
+            }
+
+            ctx.restore();
+        }
+
+        // ─── Initialize ───
+        async function init() {
+            try {
+                step1.classList.add('active');
+
+                const pose = new Pose({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`
+                });
+
+                pose.setOptions({
+                    modelComplexity: 1,
+                    smoothLandmarks: true,
+                    enableSegmentation: false,
+                    minDetectionConfidence: 0.6,
+                    minTrackingConfidence: 0.5
+                });
+
+                pose.onResults(onResults);
+
+                step1.classList.remove('active');
+                step1.classList.add('done');
+                step2.classList.add('active');
+
+                // Camera setup
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720, facingMode: 'user' }
+                });
+
+                video.srcObject = stream;
+                await video.play();
+
+                step2.classList.remove('active');
+                step2.classList.add('done');
+                step3.classList.add('active');
+
+                // Frame loop
+                async function processFrame() {
+                    if (video.readyState >= 2) {
+                        await pose.send({ image: video });
+                    }
+                    requestAnimationFrame(processFrame);
+                }
+
+                // Short delay for model warm-up
+                setTimeout(() => {
+                    step3.classList.remove('active');
+                    step3.classList.add('done');
+                    loadScreen.classList.add('hidden');
+                    hud.style.display = 'block';
+                    processFrame();
+                }, 1500);
+
+            } catch (err) {
+                console.error(err);
+                loadScreen.style.display = 'none';
+                errorScreen.classList.add('visible');
+                if (err.name === 'NotAllowedError') {
+                    errorMsg.innerHTML = '카메라 접근 권한이 거부되었습니다.<br>브라우저 설정에서 카메라 권한을 허용한 뒤 새로고침 해주세요.';
+                } else if (err.name === 'NotFoundError') {
+                    errorMsg.innerHTML = '카메라를 찾을 수 없습니다.<br>웹캠이 연결되어 있는지 확인해주세요.';
+                } else {
+                    errorMsg.innerHTML = '오류가 발생했습니다: ' + err.message + '<br>Chrome 브라우저에서 다시 시도해주세요.';
+                }
+            }
+        }
+
+        // ─── Reset ───
+        resetBtn.addEventListener('click', () => {
+            squatCount = 0;
+            wasDown = false;
+            minKneeAngle = 180;
+            countNum.textContent = '0';
+        });
+
+        // Go
+        init();
+    })();
+    </script>
+</body>
+</html>
